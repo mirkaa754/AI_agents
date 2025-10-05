@@ -1,9 +1,0 @@
-.env
-credentials.json
-token.json
-
-apikey.env
-
-*.env
-
-.env
