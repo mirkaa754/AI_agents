@@ -1,0 +1,183 @@
+{
+  "name": "AI DB Agent (Webhook → Tools Agent → DB/Tools → Respond)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "agent",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryData": false
+        }
+      },
+      "id": "Webhook1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "agent": "toolsAgent",
+        "model": "openAiChat",
+        "systemMessage": "You are a helpful data assistant.\n- Use the db_query tool for any SQL questions (read/write). Prefer SELECT ... LIMIT 100 by default.\n- Use the calculator tool for arithmetic (never guess).\n- Use the http_get tool for fetching JSON from a URL.\n- Always produce a concise final answer for the user.\n",
+        "additionalFields": {
+          "temperature": 0.2
+        }
+      },
+      "id": "Agent1",
+      "name": "AI Agent (Tools)",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [
+        40,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "__REPLACE_WITH_YOUR_OPENAI_CREDENTIAL_ID__",
+          "name": "OpenAI (YOUR)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{$json[\"sql\"]}}",
+        "additionalFields": {
+          "queryParams": "={{Array.isArray($json.params) ? $json.params : []}}"
+        },
+        "tool": {
+          "toolName": "db_query",
+          "toolDescription": "Run parameterized SQL on the products DB. Inputs: { sql: string, params?: any[] }. Returns rows."
+        }
+      },
+      "id": "Postgres1",
+      "name": "Postgres (Tool)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        180
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "__REPLACE_WITH_YOUR_POSTGRES_CREDENTIAL_ID__",
+          "name": "Postgres (YOUR)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "JavaScript",
+        "jsCode": "// Tool: calculator\n// Input JSON: { a: number, b: number, op: '+'|'-'|'*'|'/' }\nconst { a, b, op } = $json;\nconst ops = { '+': (x,y)=>x+y, '-': (x,y)=>x-y, '*': (x,y)=>x*y, '/': (x,y)=>x/y };\nif (!(op in ops)) {\n  throw new Error('Unsupported op: ' + op);\n}\nreturn [{ result: ops[op](Number(a), Number(b)) }];\n",
+        "tool": {
+          "toolName": "calculator",
+          "toolDescription": "Safely compute arithmetic. Input: { a: number, b: number, op: '+'|'-'|'*'|'/' }. Output: { result: number }"
+        }
+      },
+      "id": "Code1",
+      "name": "Calculator (Tool)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.url}}",
+        "responseFormat": "json",
+        "tool": {
+          "toolName": "http_get",
+          "toolDescription": "Fetch JSON from a public API. Input: { url: string }"
+        }
+      },
+      "id": "Http1",
+      "name": "HTTP GET (Tool)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "Respond1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        300,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent (Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent (Tools)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "tool": [
+        [
+          {
+            "node": "Calculator (Tool)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP GET (Tool)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres (Tool)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "meta": {
+    "instanceId": "exported-2025-09-09T10:53:20.746617Z"
+  },
+  "__credentialsNote__": "In n8n, set your own OpenAI and Postgres credentials, then map their IDs/names in this workflow."
+}
